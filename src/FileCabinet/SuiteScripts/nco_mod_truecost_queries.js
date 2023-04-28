@@ -72,27 +72,6 @@ define(['N/query', 'N/record', 'N/search'],
           log.debug("GET IF SOLineLink", mappedressults);
           return mappedressults;
         };
-
-        const getIFitem = (ifid, solinkid) => {
-          log.audit({ title: "Inside getIFitem", details: solinkid });
-          var sql = `SELECT
-          TransactionLine.item
-          FROM
-            TransactionAccountingLine
-            INNER JOIN TransactionLine ON
-              ( TransactionLine.Transaction = TransactionAccountingLine.Transaction )
-              AND ( TransactionLine.ID = TransactionAccountingLine.TransactionLine )
-          WHERE
-            ( TransactionAccountingLine.Transaction = ${ifid} )
-      AND (TransactionLine.custcol_nco_so_linelink = '${solinkid}')
-          ORDER BY
-            TransactionLine.ID`;
-          log.audit("getIFitem sql", sql);
-          var mappedressults = query.runSuiteQL({ query: sql }).asMappedResults();
-          // log.debug("GET IF Item of", sql);
-          log.audit("getIFitem results", mappedressults);
-          return mappedressults;
-        };
       
         const getonlyIFs = (soid) => {
           log.debug("Inside getonlyIFs", soid);
@@ -327,6 +306,6 @@ define(['N/query', 'N/record', 'N/search'],
           return mappedressults;
         };
 
-        return {getInputData, getIFdata, getIFdataFreight, getSOLineLink, getIFitem, getIFglcost, getonlyIFs, getIFglcostSeq, getPOInfo, getVBInfo, getVBglcost }
+        return {getInputData, getIFdata, getIFdataFreight, getSOLineLink, getIFglcost, getonlyIFs, getIFglcostSeq, getPOInfo, getVBInfo, getVBglcost }
 
     });

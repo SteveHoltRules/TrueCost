@@ -282,7 +282,6 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
 
         log.debug("Set Tracking", setTracking);
       }
-      // This is a second check for what was already checked.
       if (scriptContext.type === scriptContext.UserEventType.CREATE) {
         const allLineLinks = getSoLineLink(soid);
         log.debug({ title: "length", details: allLineLinks.length });
@@ -309,8 +308,7 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
           log.debug("SoLineLink", soLineLink);
           let soItem = allLineLinks[m].item;
           log.debug("SOItem", soItem);
-          /** HERE IS WHERE I HAVE TO ADD IN THE PO PIECES
-           */
+          /** HERE IS WHERE I HAVE TO ADD IN THE PO PIECES */
           const ifIds = getIFdata(soid, soLineLink);
           const poIds = getPOInfo(soid, soLineLink);
           let projectedtotal = 0;
@@ -362,6 +360,56 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
           }
           if (poIds.length) {
             /** The change to make here is to pull in the POs and then I have to down a level to find the vendor bills */
+            for (p = 0; p < poId.length; p++) {
+              const ponumber = poId[p].createdpo;
+              log.debug("PO ID", ponumber);
+              const solineLink = poId[p].custcol_nco_so_linelink;
+              log.debug("solinelinkArray", solineLink);
+              // find the line link number of the first item fulfillment line
+              // function to get the item id
+              const vbLineArray = getVBInfo(ponumber, solineLink) || 0;
+              log.debug({ title: "vbLineArray", details: vbLineArray });
+              const vbID = vbLineArray[p].nextdoc;
+              log.debug({ title: "vbID", details: vbID });
+              // vbLineItem could be define on the poId return
+              const vbLineItem = vbLineArray[p].item;
+              log.debug("VB Item", vbLineItem);
+              // const getVBglcost = (vbid, item)
+              const vbGLcostArray = getVBglcost(vbID, vbLineItem);
+              log.debug({ title: "vbGLcostArray", vbGLcostArray });
+              // how do I get this to cycle through its own loop
+              let projectedtotal = 0;
+              // need a way to loop through the lines from the VB record to place onto the invoice. If there are no returned values from the VBInfo (nothing posting), then it should skip this logic
+              // what should happen here?!
+              for (q = 0; q < vbLineArray.length; q++) {
+                // projected total accounts for additional IF lines of the same SO line
+                projectedtotal += vbGLcostArray[q].debit;
+                log.debug("Projected Total", projectedtotal);
+                let matchLine = vbLineArray[q].custcol_nco_so_linelink;
+                log.debug({ title: "matchLine", details: matchLine });
+    
+                var solinelinkmatchline = currentRecord.findSublistLineWithValue({
+                  sublistId: "item",
+                  fieldId: "custcol_nco_so_linelink",
+                  value: matchLine,
+                });
+                log.debug({
+                  title: "solinelinkmatchline",
+                  details: solinelinkmatchline,
+                });
+    
+                if (solinelinkmatchline !== -1) {
+                  log.debug({ title: "", details: "hereToSet in POiD section" });
+                  // switch this to populate the cost estimate
+                  const setTotal = currentRecord.setSublistValue({
+                    sublistId: "item",
+                    fieldId: "costestimate",
+                    line: solinelinkmatchline,
+                    value: projectedtotal,
+                  });
+                }
+              }
+            }
           }
         }
       }
@@ -371,12 +419,11 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
   };
 
   const afterSubmit = (scriptContext) => {
+
     const currentRecord = scriptContext.newRecord;
     log.debug("Current Record", currentRecord);
 
     const contextType = scriptContext.type;
-    log.debug("type", contextType);
-    // if (contextType != "create") return;
 
     log.debug("type", contextType);
     const soid = currentRecord.getValue({
@@ -387,6 +434,9 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
       log.debug("SOiD", soid);
 
       const itemfulfill = getonlyIFs(soid);
+      const poInfo = getPOInfo(soid);
+
+      if (itemfulfill.length) {
       log.debug("After Submit: Item Fulfillment", itemfulfill);
       const itemfullength = itemfulfill.length;
       log.debug("After Submit: Item Fulfillment", itemfullength);
@@ -409,7 +459,39 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
         });
       }
     }
-  };
+
+    log.debug({ title: "After Submit Test for POiD", details: poInfo });
+    log.debug( {title: "Returned Array Length of createdPO", details: poInfo.length});
+    if (!poInfo.length) return;
+    // create a for loop to get all the VBs
+    for (l = 0; l < poInfo.length; l++) {
+      const poID = poInfo[l].createdpo;
+      log.debug("vbID", poID);
+      // const getVBInfo = (poid, linelink);
+      const vbInfo = getVBInfo(poID, poInfo[l].custcol_nco_so_linelink);
+      log.debug({ title: "vbInfo", details: vbInfo });
+      // loop to get through all assembly builds on each work order
+      for (m = 0; m < vbInfo.length; m++) {
+        const vbID = vbInfo[m].nextdoc;
+        const vbRecord = record.load({
+          type: record.Type.VENDOR_BILL,
+          id: vbID,
+        });
+
+        vbRecord.setValue({
+            fieldId: "custbody_is_invoiced",
+            value: true,
+          });
+
+        // save the VB
+        const vbRecordSaved = vbRecord.save({
+          enableSourcing: true,
+          ignoreMandatoryFields: true,
+        });
+      }
+    }
+  }
+}
 
   return {
     //beforeLoad,
