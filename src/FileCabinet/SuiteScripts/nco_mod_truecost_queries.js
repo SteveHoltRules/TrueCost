@@ -124,10 +124,40 @@ define(['N/query', 'N/record', 'N/search'],
           return mappedressults;
         };
       
-        const getIFdata = (soid) => {
-    
+        const getIFdata = (soid, linelink) => {
+          log.debug("Inside GetIFdata", soid + "-" + linelink);
           var sql = `
-          SELECT DISTINCT
+        SELECT DISTINCT
+          NT.TranID,
+          NT.ID,
+          NT.Foreigntotal AS abtotal,
+          NT.trandate,
+          NT.custbody_is_invoiced,
+          NT.recordtype,
+          NT.custbody_hci_vend_freightcost,
+          NT.custbody_hf_outboundshipping,
+          NT.custbody_hci_vend_freightcost,
+          BUILTIN.DF(NT.custbody_hci_freightterms) AS FreightTerms,
+          TL.custcol4
+        FROM
+          NextTransactionLineLink NTLL
+          INNER JOIN Transaction NT ON
+          (NT.ID = NTLL.NextDoc)
+          JOIN TransactionLine TL ON
+          (TL.transaction = NT.id)
+        WHERE
+          (NTLL.PreviousDoc = ${soid}) AND (TL.custcol_nco_so_linelink = '${linelink}') AND (NT.recordtype = 'itemfulfillment') AND (NT.custbody_is_invoiced IS NULL OR NT.custbody_is_invoiced = 'F')`;
+      
+          var mappedressults = query.runSuiteQL({ query: sql }).asMappedResults();
+          log.debug("GET IF SQL", sql);
+          log.debug("GET IF ConfirmInfo", mappedressults);
+          return mappedressults;
+        };
+
+        const getIFdataFreight = (soid) => {
+    
+        var sql = `
+        SELECT DISTINCT
         NT.TranID,
         NT.ID,
         NT.Foreigntotal AS abtotal,
@@ -221,7 +251,8 @@ define(['N/query', 'N/record', 'N/search'],
           return mappedressults;
         };
 
-        const getPOInfo = (soid) => {
+        // this should be changed to include the linelink for consistency with the SO
+        const getPOInfo = (soid, linelink) => {
           log.audit({ title: "Inside getVPOInfo", details: soid });
           var sql = `SELECT
           Transactionline.item,
@@ -232,7 +263,7 @@ define(['N/query', 'N/record', 'N/search'],
           Transactionline
       WHERE 
           -- Sales Order as Transaction ID
-            Transactionline.transaction = ${soid} AND Transactionline.createdpo IS NOT NULL AND Transactionline.dropship = 'T'`;
+            Transactionline.transaction = ${soid} AND TransactionLine.custcol_nco_so_linelink = '${linelink}' AND Transactionline.createdpo IS NOT NULL AND Transactionline.dropship = 'T'`;
           log.debug("GET PO SOLineLInk", sql);
           var mappedressults = query.runSuiteQL({ query: sql }).asMappedResults();
           // log.debug("GET IF Item of", sql);
@@ -296,6 +327,6 @@ define(['N/query', 'N/record', 'N/search'],
           return mappedressults;
         };
 
-        return {getInputData, getIFdata, getSOLineLink, getIFitem, getIFglcost, getonlyIFs, getIFglcostSeq, getPOInfo, getVBInfo, getVBglcost }
+        return {getInputData, getIFdata, getIFdataFreight, getSOLineLink, getIFitem, getIFglcost, getonlyIFs, getIFglcostSeq, getPOInfo, getVBInfo, getVBglcost }
 
     });
