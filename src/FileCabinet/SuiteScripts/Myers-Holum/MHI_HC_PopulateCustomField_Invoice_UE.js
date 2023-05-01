@@ -1,4 +1,22 @@
 /**
+ * This script was originally called 
+ * @alias MHI_HC_PopulateCustomField_Invoice_UE.js
+ * @file customdeploy_mhi_hc_sourcefreight_inv_ue
+ * 
+ * This does not apply anymore and the new script name will be 
+ * nco_ue_invoice_truecost
+ * 
+ * Deployment name
+ * customdeploy_nco_ue_invoice_trucost
+ * 
+ * This script is executed on the invoice and pulls the cost based on the unique line identifier to pull in
+ * the cost acros the item fulfillments and vendor bills, for dropship items, and places the received cost
+ * on the invoice to track the expected profit on an invoice by invoice basis.
+ * 
+ * In addition to the true cost, this script also includes a function to get the salesman split percentage based on the customer,
+ * as well as a script to pull the freight cost into the invoice. The freight cost is based on the ship item and is a separate customization, but included
+ * here because there was a racing condition between the two scripts that caused errors and the cost to be wiped on exsiting orders.
+ * 
  * @NApiVersion 2.1
  * @NScriptType UserEventScript
  * @NModuleScope SameAccount
@@ -7,8 +25,8 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
   record,
   getInputData,
   getIFdata,
+  getIFdataFreight,
   getSOLineLink,
-  getIFitem,
   getIFglcost,
   getonlyIFs,
   getIFglcostSeq,
@@ -90,7 +108,7 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
   /**
    * Utility Function for Freight that was originally in a separate script.
    * This script and the separate freight script conflicted and caused the tracking number to drop when editing.
-   * The two scripts were combined by Joseph, but the updates did not include the most recent changes to account for the POs.
+   * The two scripts were combined by Joseph, but the updates did not include the changes to pull in the vendor bill for the PO cost.
    */
   const freight = (soid) => {
     log.debug("Inside Freight", "--Start--");
@@ -283,7 +301,7 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
         log.debug("Set Tracking", setTracking);
       }
       if (scriptContext.type === scriptContext.UserEventType.CREATE) {
-        const allLineLinks = getSoLineLink(soid);
+        const allLineLinks = getSOLineLink(soid);
         log.debug({ title: "length", details: allLineLinks.length });
         log.debug({ title: "All Line Links", details: allLineLinks });
         log.debug("Are there multiple SOLineLinks with this same Item? YES");
@@ -387,19 +405,23 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
                 log.debug("Projected Total", projectedtotal);
                 let matchLine = vbLineArray[q].custcol_nco_so_linelink;
                 log.debug({ title: "matchLine", details: matchLine });
-    
-                var solinelinkmatchline = currentRecord.findSublistLineWithValue({
-                  sublistId: "item",
-                  fieldId: "custcol_nco_so_linelink",
-                  value: matchLine,
-                });
+
+                var solinelinkmatchline =
+                  currentRecord.findSublistLineWithValue({
+                    sublistId: "item",
+                    fieldId: "custcol_nco_so_linelink",
+                    value: matchLine,
+                  });
                 log.debug({
                   title: "solinelinkmatchline",
                   details: solinelinkmatchline,
                 });
-    
+
                 if (solinelinkmatchline !== -1) {
-                  log.debug({ title: "", details: "hereToSet in POiD section" });
+                  log.debug({
+                    title: "",
+                    details: "hereToSet in POiD section",
+                  });
                   // switch this to populate the cost estimate
                   const setTotal = currentRecord.setSublistValue({
                     sublistId: "item",
@@ -419,7 +441,6 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
   };
 
   const afterSubmit = (scriptContext) => {
-
     const currentRecord = scriptContext.newRecord;
     log.debug("Current Record", currentRecord);
 
@@ -437,61 +458,64 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
       const poInfo = getPOInfo(soid);
 
       if (itemfulfill.length) {
-      log.debug("After Submit: Item Fulfillment", itemfulfill);
-      const itemfullength = itemfulfill.length;
-      log.debug("After Submit: Item Fulfillment", itemfullength);
-      for (j = 0; j < itemfullength; j++) {
-        const ifId = itemfulfill[j].id;
-        const ifRecord = record.load({
-          type: record.Type.ITEM_FULFILLMENT,
-          id: ifId,
-        });
+        log.debug("After Submit: Item Fulfillment", itemfulfill);
+        const itemfullength = itemfulfill.length;
+        log.debug("After Submit: Item Fulfillment", itemfullength);
+        for (j = 0; j < itemfullength; j++) {
+          const ifId = itemfulfill[j].id;
+          const ifRecord = record.load({
+            type: record.Type.ITEM_FULFILLMENT,
+            id: ifId,
+          });
 
-        ifRecord.setValue({
-          fieldId: "custbody_is_invoiced",
-          value: true,
-        });
-
-        // save the Work Order
-        const ifRecSaved = ifRecord.save({
-          enableSourcing: true,
-          ignoreMandatoryFields: true,
-        });
-      }
-    }
-
-    log.debug({ title: "After Submit Test for POiD", details: poInfo });
-    log.debug( {title: "Returned Array Length of createdPO", details: poInfo.length});
-    if (!poInfo.length) return;
-    // create a for loop to get all the VBs
-    for (l = 0; l < poInfo.length; l++) {
-      const poID = poInfo[l].createdpo;
-      log.debug("vbID", poID);
-      // const getVBInfo = (poid, linelink);
-      const vbInfo = getVBInfo(poID, poInfo[l].custcol_nco_so_linelink);
-      log.debug({ title: "vbInfo", details: vbInfo });
-      // loop to get through all assembly builds on each work order
-      for (m = 0; m < vbInfo.length; m++) {
-        const vbID = vbInfo[m].nextdoc;
-        const vbRecord = record.load({
-          type: record.Type.VENDOR_BILL,
-          id: vbID,
-        });
-
-        vbRecord.setValue({
+          ifRecord.setValue({
             fieldId: "custbody_is_invoiced",
             value: true,
           });
 
-        // save the VB
-        const vbRecordSaved = vbRecord.save({
-          enableSourcing: true,
-          ignoreMandatoryFields: true,
-        });
+          // save the Work Order
+          const ifRecSaved = ifRecord.save({
+            enableSourcing: true,
+            ignoreMandatoryFields: true,
+          });
+        }
+      }
+
+      log.debug({ title: "After Submit Test for POiD", details: poInfo });
+      log.debug({
+        title: "Returned Array Length of createdPO",
+        details: poInfo.length,
+      });
+      if (!poInfo.length) return;
+      // create a for loop to get all the VBs
+      for (l = 0; l < poInfo.length; l++) {
+        const poID = poInfo[l].createdpo;
+        log.debug("vbID", poID);
+        // const getVBInfo = (poid, linelink);
+        const vbInfo = getVBInfo(poID, poInfo[l].custcol_nco_so_linelink);
+        log.debug({ title: "vbInfo", details: vbInfo });
+        // loop to get through all assembly builds on each work order
+        for (m = 0; m < vbInfo.length; m++) {
+          const vbID = vbInfo[m].nextdoc;
+          const vbRecord = record.load({
+            type: record.Type.VENDOR_BILL,
+            id: vbID,
+          });
+
+          vbRecord.setValue({
+            fieldId: "custbody_is_invoiced",
+            value: true,
+          });
+
+          // save the VB
+          const vbRecordSaved = vbRecord.save({
+            enableSourcing: true,
+            ignoreMandatoryFields: true,
+          });
+        }
       }
     }
-  }
-}
+  };
 
   return {
     //beforeLoad,
