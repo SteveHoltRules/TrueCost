@@ -21,24 +21,10 @@
  * @NScriptType UserEventScript
  * @NModuleScope SameAccount
  */
-define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
-  record,
-  getInputData,
-  getIFdata,
-  getIFdataFreight,
-  getSOLineLink,
-  getIFglcost,
-  getonlyIFs,
-  getIFglcostSeq,
-  getPOInfo,
-  getVBInfo,
-  getVBglcost
-) => {
+define(["N/record", "SuiteScripts/nco_mod_truecost_queries"], (
+  record, tc_queries) => {
   const updateSalesTeam = (invRecord) => {
     var linecount = invRecord.getLineCount({ sublistId: "salesteam" });
-
-    // log.debug("updateSalesTeam", "Beginning");
-    // Populate salesteam from Commision Customer
 
     const gpAdj = invRecord.getValue("custbody_hci_gp_adjustment");
     log.debug("GP Adjustment Checkbox", gpAdj);
@@ -74,16 +60,16 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
           line: i,
         });
 
-        log.debug("sales team ", emp + "-" + salesrole + "-" + contribution);
+        // log.debug("sales team ", emp + "-" + salesrole + "-" + contribution);
         if (isprimary == false && contribution > 0 && i == 1) {
           invRecord.setValue({
             fieldId: "custbody_alternaterep",
             value: emp,
           });
-          log.debug(
-            "sales team value set in custom field",
-            emp + "-" + salesrole + "-" + contribution
-          );
+          // log.debug(
+          //   "sales team value set in custom field",
+          //   emp + "-" + salesrole + "-" + contribution
+          // );
         }
         if (isprimary == false && contribution > 0 && i == 2) {
           invRecord.setValue({
@@ -109,6 +95,7 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
    * Utility Function for Freight that was originally in a separate script.
    * This script and the separate freight script conflicted and caused the tracking number to drop when editing.
    * The two scripts were combined by Joseph, but the updates did not include the changes to pull in the vendor bill for the PO cost.
+   * getInputData, getSOLineLink, getonlyIFs, getIFdata, getIFdataFreight, getIFglcostSeq, getIFglcost, getPOInfo, getVBInfo, getVBglcost
    */
   const freight = (soid) => {
     log.debug("Inside Freight", "--Start--");
@@ -120,7 +107,7 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
       totaloutboundfreight: 0,
       totalinboundfreight: 0,
     };
-    const itemfulfill = getIFdataFreight(soid);
+    const itemfulfill = tc_queries.getIFdataFreight(soid);
     log.debug(itemfulfill);
     const ifLength = itemfulfill.length;
 
@@ -140,16 +127,16 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
       outboundshippingIF = itemfulfill[i].custbody_hf_outboundshipping || 0;
       inboundShippingIF = itemfulfillmentRec.getValue("handlingcost") || 0;
       sumOfFreightCost += freightCostonIF;
-      log.debug("sumOfFreightCost =", sumOfFreightCost);
+      // log.debug("sumOfFreightCost =", sumOfFreightCost);
       sumOfOutboundShipping += outboundshippingIF;
-      log.debug("sumOfOutboundShipping =", sumOfOutboundShipping);
+      // log.debug("sumOfOutboundShipping =", sumOfOutboundShipping);
       sumOfInboundShipping += inboundShippingIF;
-      log.debug("sumOfInboundShipping =", sumOfInboundShipping);
+      // log.debug("sumOfInboundShipping =", sumOfInboundShipping);
     }
     freightcost.totalfreight = sumOfFreightCost;
     freightcost.totaloutboundfreight = sumOfOutboundShipping;
     freightcost.totalinboundfreight = sumOfInboundShipping;
-    log.debug("Freight Cost", freightcost);
+    // log.debug("Freight Cost", freightcost);
     return freightcost;
   };
 
@@ -169,7 +156,7 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
     const currentRecord = scriptContext.newRecord;
     updateSalesTeam(currentRecord);
 
-    log.debug("custom form", currentRecord.customform);
+    // log.debug("custom form", currentRecord.customform);
     /** This is where the freight function starts
      * @form {Integer} currentRecord.customform
      */
@@ -180,9 +167,9 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
       ) {
         const currentRecord = scriptContext.newRecord;
         const type = record.type;
-        log.debug("Type", type);
+        // log.debug("Type", type);
         const createdFromId = currentRecord.getValue("createdfrom");
-        log.debug("Get Created From", createdFromId);
+        // log.debug("Get Created From", createdFromId);
         // const freightTerms = currentRecord.getText("custbody_hci_freightterms");
 
         const freightTerms = currentRecord.getValue(
@@ -192,17 +179,17 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
         const noInbound = currentRecord.getValue(
           "custbody_hf_do_not_bill_inbound"
         );
-        log.debug("Freight terms selected", freightTerms);
+        // log.debug("Freight terms selected", freightTerms);
         if (createdFromId != "") {
           log.debug("Inside Created From", "Created From IF");
           // include only the cost that has not been invoiced yet.
           const costObject = freight(createdFromId);
           log.debug("costObject", costObject);
           if (freightTerms == 1 || freightTerms == 4) {
-            log.debug(
-              "Inside Prepaid and Add Or Third Party Billing ",
-              freightTerms
-            );
+            // log.debug(
+            //   "Inside Prepaid and Add Or Third Party Billing ",
+            //   freightTerms
+            // );
             //vendor freight cost + adder
             currentRecord.setValue({
               fieldId: "shippingcost",
@@ -227,12 +214,12 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
               fieldId: "custbody_hci_vend_freightcost",
               value: parseFloat(costObject.totalfreight),
             });
-            log.debug(
-              "Freight updated SO =" +
-                createdFromId +
-                " Total Freight cost from IF = " +
-                costObject.totaloutboundfreight
-            );
+            // log.debug(
+            //   "Freight updated SO =" +
+            //     createdFromId +
+            //     " Total Freight cost from IF = " +
+            //     costObject.totaloutboundfreight
+            // );
           } else {
             //All other Freight Terms
             log.debug("Other Freight Terms ", freightTerms);
@@ -276,19 +263,19 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
     }
     /////////////////////////////////////////
     const type = scriptContext.type;
-    log.debug("type", type);
+    // log.debug("type", type);
     const soid = currentRecord.getValue({
       fieldId: "createdfrom",
     });
-    log.debug("Current Record", currentRecord);
-    log.debug("SOiD", soid);
+    // log.debug("Current Record", currentRecord);
+    // log.debug("SOiD", soid);
     const invLines = currentRecord.getLineCount("item");
-    log.debug("Invoice Lines", invLines);
+    // log.debug("Invoice Lines", invLines);
 
     // start of comparison between two script files
     try {
       for (j = 0; j < invLines; j++) {
-        const soInfo = getInputData(soid);
+        const soInfo = tc_queries.getInputData(soid);
         const tracking = soInfo[j].iftracking;
 
         const setTracking = currentRecord.setSublistValue({
@@ -298,13 +285,13 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
           value: tracking,
         });
 
-        log.debug("Set Tracking", setTracking);
+        // log.debug("Set Tracking", setTracking);
       }
       if (scriptContext.type === scriptContext.UserEventType.CREATE) {
-        const allLineLinks = getSOLineLink(soid);
-        log.debug({ title: "length", details: allLineLinks.length });
-        log.debug({ title: "All Line Links", details: allLineLinks });
-        log.debug("Are there multiple SOLineLinks with this same Item? YES");
+        const allLineLinks = tc_queries.getSOLineLink(soid);
+        // log.debug({ title: "length", details: allLineLinks.length });
+        // log.debug({ title: "All Line Links", details: allLineLinks });
+        // log.debug("Are there multiple SOLineLinks with this same Item? YES");
         const arrayOfItems = [];
         for (s = 0; s < allLineLinks.length; s++) {
           arrayOfItems.push(allLineLinks[s].item);
@@ -323,12 +310,12 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
          */
         for (m = 0; m < allLineLinks.length; m++) {
           let soLineLink = allLineLinks[m].custcol_nco_so_linelink;
-          log.debug("SoLineLink", soLineLink);
+          // log.debug("SoLineLink", soLineLink);
           let soItem = allLineLinks[m].item;
-          log.debug("SOItem", soItem);
+          // log.debug("SOItem", soItem);
           /** HERE IS WHERE I HAVE TO ADD IN THE PO PIECES */
-          const ifIds = getIFdata(soid, soLineLink);
-          const poIds = getPOInfo(soid, soLineLink);
+          const ifIds = tc_queries.getIFdata(soid, soLineLink);
+          const poIds = tc_queries.getPOInfo(soid, soLineLink);
           let projectedtotal = 0;
           if (ifIds.length) {
             /** This for loop is cycling through the item fufillments for the matching line that have not been invoiced
@@ -338,15 +325,15 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
               // projected total is per linelink and also for all line links on other if records
               const ifnumber = ifIds[n].id;
               log.debug("IF ID", ifnumber);
-              let lineIdseq = getIFglcostSeq(ifIds[n].id, soLineLink);
+              let lineIdseq = tc_queries.getIFglcostSeq(ifIds[n].id, soLineLink);
               let lineid = Number(lineIdseq[0].transactionline) + 2;
-              let ifGLcost = getIFglcost(ifIds[n].id, soItem, lineid);
-              log.debug("GL Credit", ifGLcost[0].credit);
+              let ifGLcost = tc_queries.getIFglcost(ifIds[n].id, soItem, lineid);
+              // log.debug("GL Credit", ifGLcost[0].credit);
               projectedtotal += ifGLcost[0].credit;
-              log.debug({
-                title: "projected total line",
-                details: projectedtotal,
-              });
+              // log.debug({
+              //   title: "projected total line",
+              //   details: projectedtotal,
+              // });
             }
             log.debug({
               title: "projected total increment",
@@ -358,10 +345,10 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
               value: projectedtotal,
             });
             // returns the line location
-            log.debug({
-              title: "solinelinkmatchline",
-              details: solinelinkmatchline,
-            });
+            // log.debug({
+            //   title: "solinelinkmatchline",
+            //   details: solinelinkmatchline,
+            // });
 
             if (solinelinkmatchline !== -1) {
               log.debug({ title: "", details: "hereToSet" });
@@ -373,8 +360,8 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
                 value: projectedtotal,
               });
             }
-            log.debug("Projected Total", projectedtotal);
-            log.debug({ title: "matchLine", details: soLineLink });
+            // log.debug("Projected Total", projectedtotal);
+            // log.debug({ title: "matchLine", details: soLineLink });
           }
           if (poIds.length) {
             /** The change to make here is to pull in the POs and then I have to down a level to find the vendor bills */
@@ -385,7 +372,7 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
               log.debug("solinelinkArray", solineLink);
               // find the line link number of the first item fulfillment line
               // function to get the item id
-              const vbLineArray = getVBInfo(ponumber, solineLink) || 0;
+              const vbLineArray = tc_queries.getVBInfo(ponumber, solineLink) || 0;
               log.debug({ title: "vbLineArray", details: vbLineArray });
               const vbID = vbLineArray[p].nextdoc;
               log.debug({ title: "vbID", details: vbID });
@@ -393,7 +380,7 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
               const vbLineItem = vbLineArray[p].item;
               log.debug("VB Item", vbLineItem);
               // const getVBglcost = (vbid, item)
-              const vbGLcostArray = getVBglcost(vbID, vbLineItem);
+              const vbGLcostArray = tc_queries.getVBglcost(vbID, vbLineItem);
               log.debug({ title: "vbGLcostArray", vbGLcostArray });
               // how do I get this to cycle through its own loop
               let projectedtotal = 0;
@@ -412,10 +399,10 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
                     fieldId: "custcol_nco_so_linelink",
                     value: matchLine,
                   });
-                log.debug({
-                  title: "solinelinkmatchline",
-                  details: solinelinkmatchline,
-                });
+                // log.debug({
+                //   title: "solinelinkmatchline",
+                //   details: solinelinkmatchline,
+                // });
 
                 if (solinelinkmatchline !== -1) {
                   log.debug({
@@ -442,25 +429,25 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
 
   const afterSubmit = (scriptContext) => {
     const currentRecord = scriptContext.newRecord;
-    log.debug("Current Record", currentRecord);
+    // log.debug("Current Record", currentRecord);
 
     const contextType = scriptContext.type;
 
-    log.debug("type", contextType);
+    // log.debug("type", contextType);
     const soid = currentRecord.getValue({
       fieldId: "createdfrom",
     });
 
     if (scriptContext.type === scriptContext.UserEventType.CREATE) {
-      log.debug("SOiD", soid);
+      // log.debug("SOiD", soid);
 
-      const itemfulfill = getonlyIFs(soid);
-      const poInfo = getPOInfo(soid);
+      const itemfulfill = tc_queries.getonlyIFs(soid);
+      const poInfo = tc_queries.getPOInfo(soid);
 
       if (itemfulfill.length) {
-        log.debug("After Submit: Item Fulfillment", itemfulfill);
+        // log.debug("After Submit: Item Fulfillment", itemfulfill);
         const itemfullength = itemfulfill.length;
-        log.debug("After Submit: Item Fulfillment", itemfullength);
+        // log.debug("After Submit: Item Fulfillment", itemfullength);
         for (j = 0; j < itemfullength; j++) {
           const ifId = itemfulfill[j].id;
           const ifRecord = record.load({
@@ -481,11 +468,11 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries.js"], (
         }
       }
 
-      log.debug({ title: "After Submit Test for POiD", details: poInfo });
-      log.debug({
-        title: "Returned Array Length of createdPO",
-        details: poInfo.length,
-      });
+      // log.debug({ title: "After Submit Test for POiD", details: poInfo });
+      // log.debug({
+      //   title: "Returned Array Length of createdPO",
+      //   details: poInfo.length,
+      // });
       if (!poInfo.length) return;
       // create a for loop to get all the VBs
       for (l = 0; l < poInfo.length; l++) {
