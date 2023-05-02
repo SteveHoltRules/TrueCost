@@ -42,18 +42,19 @@ define(["N/query", "N/record", "N/search"], /**
           NTL.custcol4 <> ' ' AND NTLL.PreviousDoc = ${soid} AND NT.recordtype = 'itemfulfillment' AND (NT.custbody_is_invoiced IS NULL OR NT.custbody_is_invoiced = 'F')`;
 
     var confirmInfo = query.runSuiteQL({ query: sql }).asMappedResults();
-    // log.debug("Sales Order Input Data", soid);
-    // log.debug("Sales Order Data", confirmInfo);
+    log.debug("Sales Order Input Data", soid);
+    log.debug("Sales Order Data", confirmInfo);
     return confirmInfo;
   };
 
   /** This a smaller statement */
 
   const getSOLineLink = (ifid) => {
-    // this version is a smaller response and should be used.
+    // this version is a smaller response and should be used....except the function changed and now I need the associated items...
     log.debug({ title: "Inside getSOlinelink", details: ifid });
     var sql = `SELECT
-          TransactionLine.custcol_nco_so_linelink AS linelink
+          TransactionLine.custcol_nco_so_linelink,
+          TransactionLine.item
           FROM
             TransactionAccountingLine
             INNER JOIN TransactionLine ON

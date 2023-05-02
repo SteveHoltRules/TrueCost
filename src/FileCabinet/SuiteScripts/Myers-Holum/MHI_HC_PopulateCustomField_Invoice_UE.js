@@ -1,28 +1,36 @@
 /**
- * This script was originally called 
+ * This script was originally called
  * @alias MHI_HC_PopulateCustomField_Invoice_UE.js
  * @file customdeploy_mhi_hc_sourcefreight_inv_ue
- * 
- * This does not apply anymore and the new script name will be 
+ *
+ * This does not apply anymore and the new script name will be
  * nco_ue_invoice_truecost
- * 
+ *
  * Deployment name
  * customdeploy_nco_ue_invoice_trucost
- * 
+ *
  * This script is executed on the invoice and pulls the cost based on the unique line identifier to pull in
- * the cost acros the item fulfillments and vendor bills, for dropship items, and places the received cost
- * on the invoice to track the expected profit on an invoice by invoice basis.
- * 
+ * the cost acros the item fulfillments for all orders except dropship items. The posting
+ * transaction for dropship items is on the vendor bills. This script takes the cost from
+ * both the item fulfillments and the vendor bills and places the amount onto invoice to track the expected profit on every invoice.
+ *
  * In addition to the true cost, this script also includes a function to get the salesman split percentage based on the customer,
  * as well as a script to pull the freight cost into the invoice. The freight cost is based on the ship item and is a separate customization, but included
  * here because there was a racing condition between the two scripts that caused errors and the cost to be wiped on exsiting orders.
+ *
+ * Transaction.custbody_is_invoiced was not enabled on the vendor bill in sandbox
+ * Transaction.solinelink was not enabled on the vendor bill in sandbox
  * 
+ * Script is failing during third loop of PO statement
+ *
  * @NApiVersion 2.1
  * @NScriptType UserEventScript
  * @NModuleScope SameAccount
  */
 define(["N/record", "SuiteScripts/nco_mod_truecost_queries"], (
-  record, tc_queries) => {
+  record,
+  tc_queries
+) => {
   const updateSalesTeam = (invRecord) => {
     var linecount = invRecord.getLineCount({ sublistId: "salesteam" });
 
@@ -38,7 +46,7 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries"], (
       //    });
       //    log.debug('Line After GP Adjustment Vendor Insert', "check")
       //  }
-      for (var i = 0; i < linecount; i++) {
+      for (i = 0; i < linecount; i++) {
         var emp = invRecord.getSublistValue({
           sublistId: "salesteam",
           fieldId: "employee",
@@ -108,23 +116,23 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries"], (
       totalinboundfreight: 0,
     };
     const itemfulfill = tc_queries.getIFdataFreight(soid);
-    log.debug(itemfulfill);
+    log.debug("itemfulfill test for query pull", itemfulfill);
     const ifLength = itemfulfill.length;
 
-    for (i = 0; i < ifLength; i++) {
+    for (t = 0; t < ifLength; t++) {
       // need to mimic the results so that the costobject contains results
       log.debug("Inside for loop of freight");
       let freightCostonIF = 0;
       let outboundshippingIF = 0;
       // Can I return the item fulfillment record values as an array and then put that in a custom column on the INV?
-      itemfulfillmentId = itemfulfill[i].id;
+      itemfulfillmentId = itemfulfill[t].id;
       itemfulfillmentRec = record.load({
         type: record.Type.ITEM_FULFILLMENT,
         id: itemfulfillmentId,
       });
 
-      freightCostonIF = itemfulfill[i].custbody_hci_vend_freightcost || 0;
-      outboundshippingIF = itemfulfill[i].custbody_hf_outboundshipping || 0;
+      freightCostonIF = itemfulfill[t].custbody_hci_vend_freightcost || 0;
+      outboundshippingIF = itemfulfill[t].custbody_hf_outboundshipping || 0;
       inboundShippingIF = itemfulfillmentRec.getValue("handlingcost") || 0;
       sumOfFreightCost += freightCostonIF;
       // log.debug("sumOfFreightCost =", sumOfFreightCost);
@@ -161,13 +169,17 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries"], (
      * @form {Integer} currentRecord.customform
      */
     if (currentRecord.getValue("customform") != 266) {
+      log.debug(
+        "scriptContext.UserEventType.Create return value",
+        scriptContext.UserEventType.CREATE
+      );
       if (
-        scriptContext.type === scriptContext.UserEventType.CREATE //|| jzr 03/23/2023 this was causing issues with clearing freight
+        scriptContext.UserEventType.CREATE == "create" //|| jzr 03/23/2023 this was causing issues with clearing freight
         //scriptContext.type === scriptContext.UserEventType.EDIT
       ) {
         const currentRecord = scriptContext.newRecord;
-        const type = record.type;
-        // log.debug("Type", type);
+        const type = currentRecord.type;
+        log.debug("Type", type);
         const createdFromId = currentRecord.getValue("createdfrom");
         // log.debug("Get Created From", createdFromId);
         // const freightTerms = currentRecord.getText("custbody_hci_freightterms");
@@ -263,165 +275,170 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries"], (
     }
     /////////////////////////////////////////
     const type = scriptContext.type;
-    // log.debug("type", type);
+    log.debug("type", type);
     const soid = currentRecord.getValue({
       fieldId: "createdfrom",
     });
     // log.debug("Current Record", currentRecord);
-    // log.debug("SOiD", soid);
+    log.debug("SOiD", soid);
     const invLines = currentRecord.getLineCount("item");
-    // log.debug("Invoice Lines", invLines);
+    log.debug("Invoice Lines", invLines);
 
-    // start of comparison between two script files
     try {
+      log.debug("Invoice Lines", invLines);
       for (j = 0; j < invLines; j++) {
+        log.debug("Invoice Lines", invLines);
         const soInfo = tc_queries.getInputData(soid);
-        const tracking = soInfo[j].iftracking;
+        log.debug("soInfo", soInfo);
+        if (soInfo.length > 0) {
+          const tracking = soInfo[j].iftracking;
 
-        const setTracking = currentRecord.setSublistValue({
-          sublistId: "item",
-          fieldId: "custcol4",
-          line: j,
-          value: tracking,
-        });
-
-        // log.debug("Set Tracking", setTracking);
-      }
-      if (scriptContext.type === scriptContext.UserEventType.CREATE) {
-        const allLineLinks = tc_queries.getSOLineLink(soid);
-        // log.debug({ title: "length", details: allLineLinks.length });
-        // log.debug({ title: "All Line Links", details: allLineLinks });
-        // log.debug("Are there multiple SOLineLinks with this same Item? YES");
-        const arrayOfItems = [];
-        for (s = 0; s < allLineLinks.length; s++) {
-          arrayOfItems.push(allLineLinks[s].item);
+          const setTracking = currentRecord.setSublistValue({
+            sublistId: "item",
+            fieldId: "custcol4",
+            line: j,
+            value: tracking,
+          });
+          log.debug("Set Tracking", setTracking);
         }
-        /** Get a list of all of the items */
-        const mapofItems = arrayOfItems.reduce(function (prev, cur) {
-          prev[cur] = (prev[cur] || 0) + 1;
-          return prev;
-        }, {});
-        log.debug("Map of Items", mapofItems);
-        if (!allLineLinks.length) return;
-        /**
-         * Multiple IF records & multiple lines on the IF record
-         * Everytime this for loop runs it is picking up a different line item
-         * soLineLink is the iterator and so it is only pulling the information for those selected IF record
-         */
-        for (m = 0; m < allLineLinks.length; m++) {
-          let soLineLink = allLineLinks[m].custcol_nco_so_linelink;
-          // log.debug("SoLineLink", soLineLink);
-          let soItem = allLineLinks[m].item;
-          // log.debug("SOItem", soItem);
-          /** HERE IS WHERE I HAVE TO ADD IN THE PO PIECES */
-          const ifIds = tc_queries.getIFdata(soid, soLineLink);
-          const poIds = tc_queries.getPOInfo(soid, soLineLink);
-          let projectedtotal = 0;
-          if (ifIds.length) {
-            /** This for loop is cycling through the item fufillments for the matching line that have not been invoiced
-             *  and incrementing the projectedtotal
-             */
-            for (n = 0; n < ifIds.length; n++) {
-              // projected total is per linelink and also for all line links on other if records
-              const ifnumber = ifIds[n].id;
-              log.debug("IF ID", ifnumber);
-              let lineIdseq = tc_queries.getIFglcostSeq(ifIds[n].id, soLineLink);
-              let lineid = Number(lineIdseq[0].transactionline) + 2;
-              let ifGLcost = tc_queries.getIFglcost(ifIds[n].id, soItem, lineid);
-              // log.debug("GL Credit", ifGLcost[0].credit);
-              projectedtotal += ifGLcost[0].credit;
-              // log.debug({
-              //   title: "projected total line",
-              //   details: projectedtotal,
-              // });
-            }
-            log.debug({
-              title: "projected total increment",
-              details: projectedtotal,
-            });
-            var solinelinkmatchline = currentRecord.findSublistLineWithValue({
+      }
+      const userEventType = currentRecord.UserEventType;
+      log.debug("Set Tracking", userEventType);
+      // It is as if because it has not been created, it is skipping this section despite returning a 'create value'
+      // if (type == 'create') {
+      const allLineLinks = tc_queries.getSOLineLink(soid);
+      log.debug({ title: "length", details: allLineLinks.length });
+      log.debug({ title: "All Line Links", details: allLineLinks });
+      log.debug("Are there multiple SOLineLinks with this same Item? YES");
+      const arrayOfItems = [];
+      for (s = 0; s < allLineLinks.length; s++) {
+        arrayOfItems.push(allLineLinks[s].item);
+      }
+      /** Get a list of all of the items */
+      const mapofItems = arrayOfItems.reduce(function (prev, cur) {
+        prev[cur] = (prev[cur] || 0) + 1;
+        return prev;
+      }, {});
+      log.debug("Map of Items", mapofItems);
+      if (!allLineLinks.length) return;
+      /**
+       * Multiple IF records & multiple lines on the IF record
+       * Everytime this for loop runs it is picking up a different line item
+       * soLineLink is the iterator and so it is only pulling the information for those selected IF record
+       */
+      for (m = 0; m < allLineLinks.length; m++) {
+        let soLineLink = allLineLinks[m].custcol_nco_so_linelink;
+        log.debug("SoLineLink", soLineLink);
+        let soItem = allLineLinks[m].item;
+        log.debug("SOItem", soItem);
+        /** HERE IS WHERE I HAVE TO ADD IN THE PO PIECES */
+        const ifIds = tc_queries.getIFdata(soid, soLineLink);
+        const poIds = tc_queries.getPOInfo(soid, soLineLink);
+        let projectedtotal = 0;
+        if (ifIds.length) {
+          /** This for loop is cycling through the item fufillments for the matching line that have not been invoiced
+           *  and incrementing the projectedtotal
+           */
+          for (n = 0; n < ifIds.length; n++) {
+            // projected total is per linelink and also for all line links on other if records
+            const ifnumber = ifIds[n].id;
+            log.debug("IF ID", ifnumber);
+            let lineIdseq = tc_queries.getIFglcostSeq(ifIds[n].id, soLineLink);
+            let lineid = Number(lineIdseq[0].transactionline) + 2;
+            let ifGLcost = tc_queries.getIFglcost(ifIds[n].id, soItem, lineid);
+            // log.debug("GL Credit", ifGLcost[0].credit);
+            projectedtotal += ifGLcost[0].credit;
+            // log.debug({
+            //   title: "projected total line",
+            //   details: projectedtotal,
+            // });
+          }
+          log.debug({
+            title: "projected total increment",
+            details: projectedtotal,
+          });
+          var solinelinkmatchline = currentRecord.findSublistLineWithValue({
+            sublistId: "item",
+            fieldId: "custcol_nco_so_linelink",
+            value: projectedtotal,
+          });
+          // returns the line location
+          // log.debug({
+          //   title: "solinelinkmatchline",
+          //   details: solinelinkmatchline,
+          // });
+
+          if (solinelinkmatchline !== -1) {
+            log.debug({ title: "", details: "hereToSet" });
+            // switch this to populate the cost estimate
+            const setTotal = currentRecord.setSublistValue({
               sublistId: "item",
-              fieldId: "custcol_nco_so_linelink",
+              fieldId: "costestimate",
+              line: solinelinkmatchline,
               value: projectedtotal,
             });
-            // returns the line location
-            // log.debug({
-            //   title: "solinelinkmatchline",
-            //   details: solinelinkmatchline,
-            // });
-
-            if (solinelinkmatchline !== -1) {
-              log.debug({ title: "", details: "hereToSet" });
-              // switch this to populate the cost estimate
-              const setTotal = currentRecord.setSublistValue({
-                sublistId: "item",
-                fieldId: "costestimate",
-                line: solinelinkmatchline,
-                value: projectedtotal,
-              });
-            }
-            // log.debug("Projected Total", projectedtotal);
-            // log.debug({ title: "matchLine", details: soLineLink });
           }
-          if (poIds.length) {
-            /** The change to make here is to pull in the POs and then I have to down a level to find the vendor bills */
-            for (p = 0; p < poId.length; p++) {
-              const ponumber = poId[p].createdpo;
-              log.debug("PO ID", ponumber);
-              const solineLink = poId[p].custcol_nco_so_linelink;
-              log.debug("solinelinkArray", solineLink);
-              // find the line link number of the first item fulfillment line
-              // function to get the item id
-              const vbLineArray = tc_queries.getVBInfo(ponumber, solineLink) || 0;
-              log.debug({ title: "vbLineArray", details: vbLineArray });
-              const vbID = vbLineArray[p].nextdoc;
-              log.debug({ title: "vbID", details: vbID });
-              // vbLineItem could be define on the poId return
-              const vbLineItem = vbLineArray[p].item;
-              log.debug("VB Item", vbLineItem);
-              // const getVBglcost = (vbid, item)
-              const vbGLcostArray = tc_queries.getVBglcost(vbID, vbLineItem);
-              log.debug({ title: "vbGLcostArray", vbGLcostArray });
-              // how do I get this to cycle through its own loop
-              let projectedtotal = 0;
-              // need a way to loop through the lines from the VB record to place onto the invoice. If there are no returned values from the VBInfo (nothing posting), then it should skip this logic
-              // what should happen here?!
-              for (q = 0; q < vbLineArray.length; q++) {
-                // projected total accounts for additional IF lines of the same SO line
-                projectedtotal += vbGLcostArray[q].debit;
-                log.debug("Projected Total", projectedtotal);
-                let matchLine = vbLineArray[q].custcol_nco_so_linelink;
-                log.debug({ title: "matchLine", details: matchLine });
+          // log.debug("Projected Total", projectedtotal);
+          // log.debug({ title: "matchLine", details: soLineLink });
+        }
+        if (poIds.length) {
+          /** This section is to find the cost from the vendor bills and display the amounts onto the invoice. The change to make here is to pull in the POs and then I have to down a level to find the vendor bills */
+          for (p = 0; p < poIds.length; p++) {
+            const ponumber = poIds[p].createdpo;
+            log.debug("PO ID", ponumber);
+            const solineLink = poIds[p].custcol_nco_so_linelink;
+            log.debug("solinelinkArray", solineLink);
+            // find the line link number of the first item fulfillment line
+            // function to get the item id
+            const vbLineArray = tc_queries.getVBInfo(ponumber, solineLink) || 0;
+            log.debug({ title: "vbLineArray", details: vbLineArray });
+            const vbID = vbLineArray[p].nextdoc;
+            log.debug({ title: "vbID", details: vbID });
+            // vbLineItem could be define on the poId return
+            const vbLineItem = vbLineArray[p].item;
+            log.debug("VB Item", vbLineItem);
+            // const getVBglcost = (vbid, item)
+            const vbGLcostArray = tc_queries.getVBglcost(vbID, vbLineItem);
+            log.debug({ title: "vbGLcostArray", vbGLcostArray });
+            // how do I get this to cycle through its own loop
+            let projectedtotal = 0;
+            // need a way to loop through the lines from the VB record to place onto the invoice. If there are no returned values from the VBInfo (nothing posting), then it should skip this logic
+            // what should happen here?!
+            for (q = 0; q < vbLineArray.length; q++) {
+              // projected total accounts for additional IF lines of the same SO line
+              projectedtotal += vbGLcostArray[q].debit;
+              log.debug("Projected Total", projectedtotal);
+              let matchLine = vbLineArray[q].custcol_nco_so_linelink;
+              log.debug({ title: "matchLine", details: matchLine });
 
-                var solinelinkmatchline =
-                  currentRecord.findSublistLineWithValue({
-                    sublistId: "item",
-                    fieldId: "custcol_nco_so_linelink",
-                    value: matchLine,
-                  });
-                // log.debug({
-                //   title: "solinelinkmatchline",
-                //   details: solinelinkmatchline,
-                // });
+              var solinelinkmatchline = currentRecord.findSublistLineWithValue({
+                sublistId: "item",
+                fieldId: "custcol_nco_so_linelink",
+                value: matchLine,
+              });
+              // log.debug({
+              //   title: "solinelinkmatchline",
+              //   details: solinelinkmatchline,
+              // });
 
-                if (solinelinkmatchline !== -1) {
-                  log.debug({
-                    title: "",
-                    details: "hereToSet in POiD section",
-                  });
-                  // switch this to populate the cost estimate
-                  const setTotal = currentRecord.setSublistValue({
-                    sublistId: "item",
-                    fieldId: "costestimate",
-                    line: solinelinkmatchline,
-                    value: projectedtotal,
-                  });
-                }
+              if (solinelinkmatchline !== -1) {
+                log.debug({
+                  title: "",
+                  details: "hereToSet in POiD section",
+                });
+                // switch this to populate the cost estimate
+                const setTotal = currentRecord.setSublistValue({
+                  sublistId: "item",
+                  fieldId: "costestimate",
+                  line: solinelinkmatchline,
+                  value: projectedtotal,
+                });
               }
             }
           }
         }
       }
+      // }
     } catch (e) {
       log.error(e.name, e.message);
     }
@@ -438,7 +455,7 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries"], (
       fieldId: "createdfrom",
     });
 
-    if (scriptContext.type === scriptContext.UserEventType.CREATE) {
+    if (contextType == "create") {
       // log.debug("SOiD", soid);
 
       const itemfulfill = tc_queries.getonlyIFs(soid);
@@ -448,8 +465,8 @@ define(["N/record", "SuiteScripts/nco_mod_truecost_queries"], (
         // log.debug("After Submit: Item Fulfillment", itemfulfill);
         const itemfullength = itemfulfill.length;
         // log.debug("After Submit: Item Fulfillment", itemfullength);
-        for (j = 0; j < itemfullength; j++) {
-          const ifId = itemfulfill[j].id;
+        for (r = 0; r < itemfullength; r++) {
+          const ifId = itemfulfill[r].id;
           const ifRecord = record.load({
             type: record.Type.ITEM_FULFILLMENT,
             id: ifId,
