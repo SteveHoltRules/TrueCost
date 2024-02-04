@@ -15,7 +15,7 @@
  * 
  * In addition to the true cost, this script also includes a function to get the salesman split percentage based on the customer,
  * as well as a script to pull the freight cost into the invoice. The freight cost is based on the ship item and is a separate customization, but included
- * here because there was a racing condition between the two scripts that caused errors and the cost to be wiped on exsiting orders.
+ * here because there was a racing condition between the two scripts that caused errors and the cost to be wiped on existing orders.
  * 
  * @NApiVersion 2.1
  * @NScriptType UserEventScript
